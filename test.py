@@ -8,3 +8,4 @@ submission = reddit.submission(id='996hiv')
 #submission = reddit.submission(id='995eot')
 print(submission.title) # to make it non-lazy
 pprint.pprint(vars(submission))
+print(submission.is_reddit_media_domain)
