@@ -7,11 +7,11 @@ import psutil
 from bs4 import BeautifulSoup
 from pystreamable import StreamableApi
 from moviepy.editor import *
-
 api = StreamableApi(secret.email, secret.streamable_pass)
 
 reddit = praw.Reddit(client_id = secret.client_id, client_secret = secret.client_secret, user_agent = secret.user_agent, username = secret.username, password = secret.password)
 
+print("Bot starting up...")
 #print(reddit.read_only)
 
 def ScrapeImgurVideo(link_id, mention_id):
@@ -54,6 +54,17 @@ def ProcessVideo(link, mention, start_time, end_time, slow_factor):
         if proc.name() == PROCNAME:
             proc.kill()
 
+def ProcessFullVideo(link, mention):
+    clip = VideoFileClip(link + "_" + mention + ".mp4").fx( vfx.speedx, float(0.5))
+    clip.write_videofile(link + "_" + mention + "_processed" + ".mp4")
+    clip.reader.close()
+
+    PROCNAME = 'ffmpeg-win64-v4.1.exe'
+    for proc in psutil.process_iter():
+        # check whether the process name matches
+        if proc.name() == PROCNAME:
+            proc.kill()
+
 def UploadVideo(videoName):
     api.upload_video(videoName, str(videoName))
     return api.upload_video(videoName, str(videoName)).get('shortcode')
@@ -67,6 +78,7 @@ def get_sec(time_str):
 
 while True:
     for mention in reddit.inbox.mentions(limit=25):
+        isFormatted = True
         if mention.new:
             if (mention.submission.is_reddit_media_domain) != False:
                 ScrapeRedditVideo(str(mention.submission), mention)
@@ -75,20 +87,29 @@ while True:
             else:
                 ScrapeImgurVideo(str(mention.submission), mention)
 
-            print(mention.body.split(" ")[1], mention.body.split(" ")[2], mention.body.split(" ")[3])
+            #print(mention.body.split(" ")[1], mention.body.split(" ")[2], mention.body.split(" ")[3])
             try:
                 ProcessVideo(str(mention.submission), str(mention), mention.body.split(" ")[1], mention.body.split(" ")[2], mention.body.split(" ")[3])
             except (OSError):
                 print("Path to downloaded video was not found. MoviePy Error")
-            try:
-                PostReply(mention, "[Here is your processed video]" + '(https://streamable.com/' + UploadVideo(str(mention.submission) + "_" + str(mention) + "_processed.mp4") + ')')
-                print("Reply Posted")
-            except (FileNotFoundError):
-                print("File could not be found for the Post Reply func.")
+            except (IndexError):
+                if(str(mention.body).lower() != "/u/slowyourrollbot"):
+                    print("User probably did not format parameters properly")
+                    PostReply(mention, 'Are you sure that you formatted your time stamps correctly? An example of a correct call would be "/u/SlowYourRollBot 0:03 0:06 0.5", this would slow the video down starting from 3 seconds to 6 seconds by a factor of 0.5.')
+                    isFormatted = False
+                else:
+                    ProcessFullVideo(str(mention.submission), str(mention))
+            if(isFormatted):
+                try:
+                    print("Uploading File")
+                    PostReply(mention, "[Here is your processed video]" + '(https://streamable.com/' + UploadVideo(str(mention.submission) + "_" + str(mention) + "_processed.mp4") + ')')
+                    print("Reply Posted")
+                except (FileNotFoundError):
+                    print("File could not be found for the Post Reply func.")
             mention.mark_read()
             try:
-                os.remove(str(str(mention.submission) + "_" + str(mention) + "_processed.mp4"))
                 os.remove(str(mention.submission) + "_" + str(mention) + ".mp4")
+                os.remove(str(str(mention.submission) + "_" + str(mention) + "_processed.mp4"))
                 print("Files Deleted")
             except(FileNotFoundError):
                 print("File could not be found for the os remove function.")
